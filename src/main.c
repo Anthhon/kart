@@ -1,17 +1,39 @@
+#define _XOPEN_SOURCE 700
+
 #include <errno.h>
+#include <ftw.h>
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#define KART_TOML_FILENAME "kart.toml"
 #define KART_LOG(...) fprintf(stderr, "kart: " __VA_ARGS__)
+#define ELEMENTS_COUNT(vector) sizeof vector / sizeof vector[0]
 
 static void print_banner(void)
 {
     fputs("▌     ▗ \n"
           "▙▘▀▌▛▘▜▘\n"
           "▛▖█▌▌ ▐▖\n", stdout);
+}
+
+static int remove_entry(const char *path, const struct stat *sb, int type, struct FTW *ftw)
+{
+    // Cast to generic types
+    (void)sb; (void)type; (void)ftw;
+
+    if (remove(path) != 0) {
+        KART_LOG("could not remove '%s': %s\n", path, strerror(errno));
+        return -1; // Nonzero stops walk
+    }
+    return 0;
+}
+
+static int folder_remove_all(const char *path)
+{
+    return nftw(path, remove_entry, 16, FTW_DEPTH | FTW_PHYS);
 }
 
 static int path_join(char *out, size_t size, const char *base, const char *name)
@@ -47,7 +69,7 @@ static int folder_new(const char *path)
 static int cmd_new(const char *name)
 {
     static const char *const dirs[]  = { "src", "include", "target", "tests" };
-    static const char *const files[] = { "src/main.c", ".gitignore" };
+    static const char *const files[] = { "src/main.c", ".gitignore", KART_TOML_FILENAME };
     char path[PATH_MAX];
 
     KART_LOG("creating new project '%s'\n", name);
@@ -55,13 +77,13 @@ static int cmd_new(const char *name)
     if (folder_new(name) != 0)
         return 1;
 
-    for (size_t i = 0; i < sizeof dirs / sizeof dirs[0]; i++) {
+    for (size_t i = 0; i < ELEMENTS_COUNT(dirs); i++) {
         if (path_join(path, sizeof path, name, dirs[i]) != 0 ||
             folder_new(path) != 0)
             return 1;
     }
 
-    for (size_t i = 0; i < sizeof files / sizeof files[0]; i++) {
+    for (size_t i = 0; i < ELEMENTS_COUNT(files); i++) {
         if (path_join(path, sizeof path, name, files[i]) != 0 ||
             file_new(path) != 0)
             return 1;
@@ -71,11 +93,40 @@ static int cmd_new(const char *name)
     return 0;
 }
 
+static int cmd_clean(void)
+{
+    struct stat st;
+
+    // Safeguard with kart config file
+    if (lstat(KART_TOML_FILENAME, &st) != 0) {
+        if (errno == ENOENT) {
+            KART_LOG("no '%s' in current folder, not a kart project\n", KART_TOML_FILENAME);
+        } else {
+            KART_LOG("could not access '%s': %s\n", KART_TOML_FILENAME, strerror(errno));
+        }
+        return 1;
+    }
+
+    if (lstat("target", &st) != 0) {
+        if (errno == ENOENT) {
+            KART_LOG("nothing to clean\n");
+            return 0;
+        }
+        KART_LOG("could not access 'target': %s\n", strerror(errno));
+        return 1;
+    }
+
+    KART_LOG("removing 'target'\n");
+    if (folder_remove_all("target") != 0)
+        return 1;
+
+    return 0;
+}
+
 // TODO: implement commands
 static int cmd_run(void)   { KART_LOG("run: not implemented\n");   return 1; }
 static int cmd_build(void) { KART_LOG("build: not implemented\n"); return 1; }
 static int cmd_test(void)  { KART_LOG("test: not implemented\n");  return 1; }
-static int cmd_clean(void) { KART_LOG("clean: not implemented\n"); return 1; }
 
 #define OPTIONAL_ARGS \
     OPTIONAL_STRING_ARG(operation_new, NULL, "-n", "name", "Create a new project with a given name")
