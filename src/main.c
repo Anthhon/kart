@@ -3,14 +3,25 @@
 #include <errno.h>
 #include <ftw.h>
 #include <limits.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define KART_TOML_FILENAME "kart.toml"
+#define KART_CONFIG_FILENAME "kart.toml"
 #define KART_LOG(...) fprintf(stderr, "kart: " __VA_ARGS__)
-#define ELEMENTS_COUNT(vector) sizeof vector / sizeof vector[0]
+#define ELEMENTS_COUNT(vector) (sizeof vector / sizeof vector[0])
+
+#define KART_CONFIG_TEMPLATE              \
+    "[package]\n"                         \
+    "name = \"%s\"\n"                     \
+    "version = \"0.1.0\"\n"               \
+    "std = \"c11\"\n"                     \
+    "\n"                                  \
+    "[build]\n"                           \
+    "cflags = [\"-Wall\", \"-Werror\"]\n" \
+    "ldflags = []\n"                      \
 
 static void print_banner(void)
 {
@@ -46,6 +57,29 @@ static int path_join(char *out, size_t size, const char *base, const char *name)
     return 0;
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((format(printf, 2, 3)))
+#endif
+static int file_write(const char *path, const char *fmt, ...)
+{
+    FILE *f = fopen(path, "w");
+    if (f == NULL) {
+        KART_LOG("could not create file '%s': %s\n", path, strerror(errno));
+        return -1;
+    }
+
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vfprintf(f, fmt, ap);
+    va_end(ap);
+
+    if (n < 0 || fclose(f) != 0) {
+        KART_LOG("could not write file '%s': %s\n", path, strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
 static int file_new(const char *path)
 {
     FILE *f = fopen(path, "w+");
@@ -69,7 +103,7 @@ static int folder_new(const char *path)
 static int cmd_new(const char *name)
 {
     static const char *const dirs[]  = { "src", "include", "target", "tests" };
-    static const char *const files[] = { "src/main.c", ".gitignore", KART_TOML_FILENAME };
+    static const char *const files[] = { "src/main.c", ".gitignore", KART_CONFIG_FILENAME };
     char path[PATH_MAX];
 
     KART_LOG("creating new project '%s'\n", name);
@@ -77,19 +111,28 @@ static int cmd_new(const char *name)
     if (folder_new(name) != 0)
         return 1;
 
+    // Create folders
     for (size_t i = 0; i < ELEMENTS_COUNT(dirs); i++) {
         if (path_join(path, sizeof path, name, dirs[i]) != 0 ||
             folder_new(path) != 0)
             return 1;
     }
 
+    // Create files
     for (size_t i = 0; i < ELEMENTS_COUNT(files); i++) {
         if (path_join(path, sizeof path, name, files[i]) != 0 ||
             file_new(path) != 0)
             return 1;
     }
 
+    // Set default configuration file
+    if (path_join(path, sizeof path, name, KART_CONFIG_FILENAME) != 0 ||
+            file_write(path, KART_CONFIG_TEMPLATE, name) != 0) {
+        return 1;
+    }
+
     KART_LOG("project created successfully\n");
+
     return 0;
 }
 
@@ -98,11 +141,11 @@ static int cmd_clean(void)
     struct stat st;
 
     // Safeguard with kart config file
-    if (lstat(KART_TOML_FILENAME, &st) != 0) {
+    if (lstat(KART_CONFIG_FILENAME, &st) != 0) {
         if (errno == ENOENT) {
-            KART_LOG("no '%s' in current folder, not a kart project\n", KART_TOML_FILENAME);
+            KART_LOG("no '%s' in current folder, not a kart project\n", KART_CONFIG_FILENAME);
         } else {
-            KART_LOG("could not access '%s': %s\n", KART_TOML_FILENAME, strerror(errno));
+            KART_LOG("could not access '%s': %s\n", KART_CONFIG_FILENAME, strerror(errno));
         }
         return 1;
     }
@@ -128,6 +171,11 @@ static int cmd_run(void)   { KART_LOG("run: not implemented\n");   return 1; }
 static int cmd_build(void) { KART_LOG("build: not implemented\n"); return 1; }
 static int cmd_test(void)  { KART_LOG("test: not implemented\n");  return 1; }
 
+static void config_read(void)
+{
+    KART_LOG("reading configuration file '%s'\n", KART_CONFIG_FILENAME);
+}
+
 #define OPTIONAL_ARGS \
     OPTIONAL_STRING_ARG(operation_new, "", "-n", "name", "Create a new project with a given name")
 
@@ -136,6 +184,7 @@ static int cmd_test(void)  { KART_LOG("test: not implemented\n");  return 1; }
     BOOLEAN_ARG(operation_build, "-b", "Build project") \
     BOOLEAN_ARG(operation_test, "-t", "Run testing modules") \
     BOOLEAN_ARG(operation_clean, "-c", "Clear project artifacts") \
+    BOOLEAN_ARG(enable_hot_reloading, "--hot-reloading", "Enables hot-reloading") \
     BOOLEAN_ARG(help, "-h", "Show help")
 
 #include "easyargs.h"
@@ -154,16 +203,19 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    if (args.operation_new)
+    if (args.operation_new[0] != '\0')
         return cmd_new(args.operation_new);
-    if (args.operation_run) // TODO
-        return cmd_run();
-    if (args.operation_build) // TODO
-        return cmd_build();
-    if (args.operation_test) // TODO
-        return cmd_test();
-    if (args.operation_clean)
+    else if (args.operation_clean)
         return cmd_clean();
+
+    config_read();
+
+    if (args.operation_run)
+        return cmd_run();
+    else if (args.operation_build)
+        return cmd_build();
+    else if (args.operation_test)
+        return cmd_test();
 
     return 0;
 }
