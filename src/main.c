@@ -129,7 +129,7 @@ static int cmd_build(void) { KART_LOG("build: not implemented\n"); return 1; }
 static int cmd_test(void)  { KART_LOG("test: not implemented\n");  return 1; }
 
 #define OPTIONAL_ARGS \
-    OPTIONAL_STRING_ARG(operation_new, NULL, "-n", "name", "Create a new project with a given name")
+    OPTIONAL_STRING_ARG(operation_new, "", "-n", "name", "Create a new project with a given name")
 
 #define BOOLEAN_ARGS \
     BOOLEAN_ARG(operation_run, "-r", "Run project") \
@@ -156,11 +156,11 @@ int main(int argc, char *argv[])
 
     if (args.operation_new)
         return cmd_new(args.operation_new);
-    if (args.operation_run)
+    if (args.operation_run) // TODO
         return cmd_run();
-    if (args.operation_build)
+    if (args.operation_build) // TODO
         return cmd_build();
-    if (args.operation_test)
+    if (args.operation_test) // TODO
         return cmd_test();
     if (args.operation_clean)
         return cmd_clean();
