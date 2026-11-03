@@ -3,15 +3,27 @@
 #include <errno.h>
 #include <ftw.h>
 #include <limits.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include "../include/tomlc17/tomlc17.h"
+
 #define KART_CONFIG_FILENAME "kart.toml"
-#define KART_LOG(...) fprintf(stderr, "kart: " __VA_ARGS__)
-#define ELEMENTS_COUNT(vector) (sizeof vector / sizeof vector[0])
+#define ELEMENTS_COUNT(vector) (int)(sizeof vector / sizeof vector[0])
+
+#define ANSI_RESET  "\x1b[0m"
+#define ANSI_BOLD   "\x1b[1m"
+#define ANSI_YELLOW "\x1b[33m"
+#define ANSI_CYAN   "\x1b[36m"
+#define ANSI_RED    "\x1b[31m"
+#define LOG_WRN(...)  fprintf(stderr, ANSI_BOLD ANSI_YELLOW "[wrn]" ANSI_RESET " kart: " __VA_ARGS__)
+#define LOG_INF(...)  fprintf(stdout, ANSI_BOLD ANSI_CYAN   "[inf]" ANSI_RESET " kart: " __VA_ARGS__)
+#define LOG_ERR(...)  fprintf(stderr, ANSI_BOLD ANSI_RED    "[err]" ANSI_RESET " kart: " __VA_ARGS__)
 
 #define KART_CONFIG_TEMPLATE              \
     "[package]\n"                         \
@@ -22,6 +34,36 @@
     "[build]\n"                           \
     "cflags = [\"-Wall\", \"-Werror\"]\n" \
     "ldflags = []\n"                      \
+
+typedef struct {
+    toml_result_t result;
+    char* name;
+    char* version;
+    char* std;
+} config_t;
+
+typedef enum {
+    // Required fields
+    F_NAME, F_VERSION, F_STD,
+    
+    // TODO: Optional fields
+    // TODO: Boolean fields
+
+    F_COUNT,
+} field_id;
+
+typedef struct {
+    const char* key;
+    field_id id;
+} field_t;
+
+static const field_t fields[F_COUNT] = {
+    [F_NAME]    = {"package.name",    F_NAME},
+    [F_VERSION] = {"package.version", F_VERSION},
+    [F_STD]     = {"package.std",     F_STD},
+};
+
+config_t config = {0};
 
 static void print_banner(void)
 {
@@ -36,7 +78,7 @@ static int remove_entry(const char *path, const struct stat *sb, int type, struc
     (void)sb; (void)type; (void)ftw;
 
     if (remove(path) != 0) {
-        KART_LOG("could not remove '%s': %s\n", path, strerror(errno));
+        LOG_WRN("could not remove '%s': %s\n", path, strerror(errno));
         return -1; // Nonzero stops walk
     }
     return 0;
@@ -51,7 +93,7 @@ static int path_join(char *out, size_t size, const char *base, const char *name)
 {
     int n = snprintf(out, size, "%s/%s", base, name);
     if (n < 0 || (size_t)n >= size) {
-        KART_LOG("path too long: '%s/%s'\n", base, name);
+        LOG_WRN("path too long: '%s/%s'\n", base, name);
         return -1;
     }
     return 0;
@@ -64,7 +106,7 @@ static int file_write(const char *path, const char *fmt, ...)
 {
     FILE *f = fopen(path, "w");
     if (f == NULL) {
-        KART_LOG("could not create file '%s': %s\n", path, strerror(errno));
+        LOG_WRN("could not create file '%s': %s\n", path, strerror(errno));
         return -1;
     }
 
@@ -74,7 +116,7 @@ static int file_write(const char *path, const char *fmt, ...)
     va_end(ap);
 
     if (n < 0 || fclose(f) != 0) {
-        KART_LOG("could not write file '%s': %s\n", path, strerror(errno));
+        LOG_WRN("could not write file '%s': %s\n", path, strerror(errno));
         return -1;
     }
     return 0;
@@ -84,7 +126,7 @@ static int file_new(const char *path)
 {
     FILE *f = fopen(path, "w+");
     if (f == NULL) {
-        KART_LOG("could not create file '%s': %s\n", path, strerror(errno));
+        LOG_WRN("could not create file '%s': %s\n", path, strerror(errno));
         return -1;
     }
     fclose(f);
@@ -94,7 +136,7 @@ static int file_new(const char *path)
 static int folder_new(const char *path)
 {
     if (mkdir(path, 0755) != 0) {
-        KART_LOG("could not create folder '%s': %s\n", path, strerror(errno));
+        LOG_WRN("could not create folder '%s': %s\n", path, strerror(errno));
         return -1;
     }
     return 0;
@@ -106,7 +148,7 @@ static int cmd_new(const char *name)
     static const char *const files[] = { "src/main.c", ".gitignore", KART_CONFIG_FILENAME };
     char path[PATH_MAX];
 
-    KART_LOG("creating new project '%s'\n", name);
+    LOG_INF("creating new project '%s'\n", name);
 
     if (folder_new(name) != 0)
         return 1;
@@ -131,7 +173,7 @@ static int cmd_new(const char *name)
         return 1;
     }
 
-    KART_LOG("project created successfully\n");
+    LOG_INF("project created successfully\n");
 
     return 0;
 }
@@ -140,26 +182,16 @@ static int cmd_clean(void)
 {
     struct stat st;
 
-    // Safeguard with kart config file
-    if (lstat(KART_CONFIG_FILENAME, &st) != 0) {
-        if (errno == ENOENT) {
-            KART_LOG("no '%s' in current folder, not a kart project\n", KART_CONFIG_FILENAME);
-        } else {
-            KART_LOG("could not access '%s': %s\n", KART_CONFIG_FILENAME, strerror(errno));
-        }
-        return 1;
-    }
-
     if (lstat("target", &st) != 0) {
         if (errno == ENOENT) {
-            KART_LOG("nothing to clean\n");
+            LOG_WRN("nothing to clean\n");
             return 0;
         }
-        KART_LOG("could not access 'target': %s\n", strerror(errno));
+        LOG_WRN("could not access 'target': %s\n", strerror(errno));
         return 1;
     }
 
-    KART_LOG("removing 'target'\n");
+    LOG_INF("removing 'target'\n");
     if (folder_remove_all("target") != 0)
         return 1;
 
@@ -167,14 +199,9 @@ static int cmd_clean(void)
 }
 
 // TODO: implement commands
-static int cmd_run(void)   { KART_LOG("run: not implemented\n");   return 1; }
-static int cmd_build(void) { KART_LOG("build: not implemented\n"); return 1; }
-static int cmd_test(void)  { KART_LOG("test: not implemented\n");  return 1; }
-
-static void config_read(void)
-{
-    KART_LOG("reading configuration file '%s'\n", KART_CONFIG_FILENAME);
-}
+static int cmd_run(void)   { LOG_ERR("run: not implemented\n");   return 1; }
+static int cmd_build(void) { LOG_ERR("build: not implemented\n"); return 1; }
+static int cmd_test(void)  { LOG_ERR("test: not implemented\n");  return 1; }
 
 #define OPTIONAL_ARGS \
     OPTIONAL_STRING_ARG(operation_new, "", "-n", "name", "Create a new project with a given name")
@@ -203,12 +230,46 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    if (args.operation_new[0] != '\0')
+    if (args.operation_new[0] != '\0') {
         return cmd_new(args.operation_new);
-    else if (args.operation_clean)
+    } else if (args.operation_clean) {
         return cmd_clean();
+    }
 
-    config_read();
+    struct stat st; // Safeguard with kart config file
+    if (lstat(KART_CONFIG_FILENAME, &st) != 0) {
+        if (errno == ENOENT) {
+            LOG_WRN("could not find '%s' file\n", KART_CONFIG_FILENAME);
+        } else {
+            LOG_WRN("could not access '%s' file: %s\n", KART_CONFIG_FILENAME, strerror(errno));
+        }
+        return 1;
+    }
+
+    config.result = toml_parse_file_ex(KART_CONFIG_FILENAME);
+    if (!config.result.ok) {
+        LOG_WRN("tomlc17: %s\n", config.result.errmsg);
+    }
+
+    // Get required fields
+    for (int i = 0; i < F_COUNT; i++) {
+        toml_datum_t field = toml_seek(config.result.toptab, fields[i].key);
+        if (field.type != TOML_STRING) {
+            LOG_WRN("missing or invalid '%s' property in config\n", fields[i].key);
+        }
+
+        switch (i) {
+            case F_NAME:
+                config.name = (char*)field.u.s;
+                break;
+            case F_VERSION:
+                config.version = (char*)field.u.s;
+                break;
+            case F_STD:
+                config.std = (char*)field.u.s;
+                break;
+        }
+    }
 
     if (args.operation_run)
         return cmd_run();
@@ -216,6 +277,10 @@ int main(int argc, char *argv[])
         return cmd_build();
     else if (args.operation_test)
         return cmd_test();
+
+    // Clean-up config content
+    toml_free(config.result);
+    memset(&config, 0, sizeof(config));
 
     return 0;
 }
