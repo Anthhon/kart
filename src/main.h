@@ -2,7 +2,7 @@
 #define MAIN_H_
 
 #include <stdio.h>
-#include "../include/tomlc17/tomlc17.h"
+#include "tomlc17/tomlc17.h"
 
 // Kart macros
 #define KART_CONFIG_FILENAME "kart.toml"
@@ -28,21 +28,29 @@
 
 typedef struct {
     toml_result_t result;
+
     char* name;
     char* version;
     char* std;
+
+    struct toml_datum_t cflags;
+    struct toml_datum_t ldflags;
 } config_t;
 
 typedef enum {
     // Required fields
     F_NAME, F_VERSION, F_STD,
     
-    // TODO: Optional fields
+    // Optional fields
+    F_CFLAGS, F_LDFLAGS,
+
     // TODO: Boolean fields
 
     F_COUNT,
 } field_id;
 
+// TODO: The fields struct can be
+// simplified only to an array of keys
 typedef struct {
     const char* key;
     field_id id;

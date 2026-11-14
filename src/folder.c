@@ -1,5 +1,5 @@
-#include <linux/limits.h>
 #define _XOPEN_SOURCE 700
+#include <linux/limits.h>
 #include <string.h>
 #include <ftw.h>
 #include <errno.h>

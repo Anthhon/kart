@@ -1,0 +1,8 @@
+[package]
+name = "kart"
+version = "1.0.0"
+std = "c23"
+
+[build]
+cflags = ["-Wall", "-Werror", "-Wextra", "-pedantic", "-g"]
+#ldflags = [""]
