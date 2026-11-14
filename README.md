@@ -66,7 +66,7 @@ Kart encourages a simple and conventional organization for C projects.
 | `target/` | Generated executables and build artifacts. |
 | `tests/` | Project testing modules. |
 
-The directory structure is intentionally minimal and can be adapted to the needs of individual projects. *(Though, the project may implement a custom implementation of a TOML parser in the future)*
+The directory structure is intentionally minimal and can be adapted to the needs of individual projects. 
 
 ## Dependencies
 
@@ -75,7 +75,7 @@ Kart is written in C and keeps its dependencies minimal.
 - **GCC:** Used to compile managed projects.
 - **tomlc17:** Used to parse the TOML project configuration.
 
-The TOML parser is bundled with the project, so there is no need to install it separately.
+The TOML parser is bundled with the project, so there is no need to install it separately. *(Though, the project may implement a custom implementation of a TOML parser in the future)*
 
 ## License
 
