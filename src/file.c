@@ -1,3 +1,4 @@
+#include "helpers.h"
 #define _XOPEN_SOURCE 700
 #include <errno.h>
 #include <dirent.h>
@@ -6,6 +7,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include "main.h"
+#include "helpers.h"
 
 bool file_exists(const char* path)
 {
@@ -69,7 +71,7 @@ void file_append_into(char* dir_path, char* dest)
             file_append_into(path, dest);
         } else if (is_file_code(path)) {
             strncat(dest, path, strlen(path) + 1); 
-            strncat(dest, " ", 2);
+            STRNCAT_EMPTY_SPACE();
         }
     }
 

@@ -95,13 +95,13 @@ static int cmd_run(char* args[], int argc)
     char command[ARG_MAX] = {0};
 
     // Create base run command
-    strncat(command, "./target/", 10);
+    STRNCAT_LITERAL_STR(command, "./target/");
     strncat(command, config.name, strlen(config.name));
 
     // Append arguments to run command
     if (args != NULL) {
         for (int i = 0; i < argc; i++) {
-            strncat(command, " ", 2);
+            STRNCAT_EMPTY_SPACE();
             strncat(command, args[i], strlen(args[i]));
         } }
 
