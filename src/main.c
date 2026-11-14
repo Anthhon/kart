@@ -118,25 +118,25 @@ static int cmd_build(void)
     char command[ARG_MAX] = {0};
 
     // Create base build command
-    strncat(command, "gcc ", 5);
+    STRNCAT_LITERAL_STR(command, "gcc ");
 
     // Append cflags
     if (config.cflags.u.arr.size > 0) {
         for (int i = 0; i < config.cflags.u.arr.size; ++i) {
             const char* curr_elem = config.cflags.u.arr.elem[i].u.s;
             strncat(command, curr_elem, strlen(curr_elem));
-            strncat(command, " ", 2);
+            STRNCAT_EMPTY_SPACE();
         }
     }
 
     // Append compiler standard
     if (config.std != NULL && config.std[0] != '\0') {
-        strncat(command, "-std=", 6);
+        STRNCAT_LITERAL_STR(command, "-std=");
         strncat(command, config.std, strlen(config.std));
-        strncat(command, " ", 2);
+        STRNCAT_EMPTY_SPACE();
     }
 
-    // TODO: Append all files at src/ and include/ (can use dirent.h)
+    // Append all files at src/
     file_append_into("src", (char*)&command);
 
     // Appends ldflags
@@ -144,14 +144,14 @@ static int cmd_build(void)
         for (int i = 0; i < config.ldflags.u.arr.size; ++i) {
             const char* curr_elem = config.ldflags.u.arr.elem[i].u.s;
             strncat(command, curr_elem, strlen(curr_elem));
-            strncat(command, " ", 2);
+            STRNCAT_EMPTY_SPACE();
         }
     }
 
     // TODO: Append ldlibs
 
     // Output path
-    strncat(command, "-o target/", 11);
+    STRNCAT_LITERAL_STR(command, "-o target/");
     strncat(command, config.name, strlen(config.name));
 
     LOG_INF("running: '%s'\n", command);
