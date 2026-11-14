@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 
-#define STRNCAT_EMPTY_SPACE() strncat(command, " ", 2)
+#define STRNCAT_EMPTY_SPACE(dest) strncat((dest), " ", 2)
 #define STRNCAT_LITERAL_STR(path, str) strncat((path), (str), sizeof (#str))
 #define ELEMENTS_COUNT(vector) (int)(sizeof vector / sizeof vector[0])
 

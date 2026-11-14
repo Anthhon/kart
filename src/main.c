@@ -21,12 +21,12 @@ config_t config = {0};
 static const char *const dirs[]  = { "src", "include", "target", "tests" };
 static const char *const files[] = { "src/main.c", ".gitignore", KART_CONFIG_FILENAME };
 
-static const field_t fields[F_COUNT] = {
-    [F_NAME]    = {"package.name"   , F_NAME   },
-    [F_VERSION] = {"package.version", F_VERSION},
-    [F_STD]     = {"package.std"    , F_STD    },
-    [F_CFLAGS]  = {"build.cflags"   , F_CFLAGS },
-    [F_LDFLAGS] = {"build.ldflags"  , F_LDFLAGS},
+static const char* fields[F_COUNT] = {
+    [F_NAME]    = "package.name",
+    [F_VERSION] = "package.version",
+    [F_STD]     = "package.std",
+    [F_CFLAGS]  = "build.cflags",
+    [F_LDFLAGS] = "build.ldflags",
 };
 
 static int cmd_new(const char *name)
@@ -46,14 +46,14 @@ static int cmd_new(const char *name)
         return 1;
 
     // Create folders
-    for (size_t i = 0; i < ELEMENTS_COUNT(dirs); i++) {
+    for (int i = 0; i < ELEMENTS_COUNT(dirs); i++) {
         if (path_join(path, sizeof path, name, dirs[i]) != 0 ||
             folder_new(path) != 0)
             return 1;
     }
 
     // Create files
-    for (size_t i = 0; i < ELEMENTS_COUNT(files); i++) {
+    for (int i = 0; i < ELEMENTS_COUNT(files); i++) {
         if (path_join(path, sizeof path, name, files[i]) != 0 ||
             file_new(path) != 0)
             return 1;
@@ -101,14 +101,16 @@ static int cmd_run(char* args[], int argc)
     // Append arguments to run command
     if (args != NULL) {
         for (int i = 0; i < argc; i++) {
-            STRNCAT_EMPTY_SPACE();
+            STRNCAT_EMPTY_SPACE(command);
             strncat(command, args[i], strlen(args[i]));
         } }
 
     LOG_INF("running: %s\n", command);
-    system(command);
+    int rc = system(command);
 
-    return 0;
+    // Check if got child real exit code and if
+    // so get the exit status
+    return WIFEXITED(rc) ? WEXITSTATUS(rc) : 1;
 }
 
 static int cmd_build(void)
@@ -125,7 +127,7 @@ static int cmd_build(void)
         for (int i = 0; i < config.cflags.u.arr.size; ++i) {
             const char* curr_elem = config.cflags.u.arr.elem[i].u.s;
             strncat(command, curr_elem, strlen(curr_elem));
-            STRNCAT_EMPTY_SPACE();
+            STRNCAT_EMPTY_SPACE(command);
         }
     }
 
@@ -133,7 +135,7 @@ static int cmd_build(void)
     if (config.std != NULL && config.std[0] != '\0') {
         STRNCAT_LITERAL_STR(command, "-std=");
         strncat(command, config.std, strlen(config.std));
-        STRNCAT_EMPTY_SPACE();
+        STRNCAT_EMPTY_SPACE(command);
     }
 
     // Append all files at src/
@@ -144,7 +146,7 @@ static int cmd_build(void)
         for (int i = 0; i < config.ldflags.u.arr.size; ++i) {
             const char* curr_elem = config.ldflags.u.arr.elem[i].u.s;
             strncat(command, curr_elem, strlen(curr_elem));
-            STRNCAT_EMPTY_SPACE();
+            STRNCAT_EMPTY_SPACE(command);
         }
     }
 
@@ -155,7 +157,10 @@ static int cmd_build(void)
     strncat(command, config.name, strlen(config.name));
 
     LOG_INF("running: '%s'\n", command);
-    system(command);
+    if (system(command) != 0) {
+        LOG_ERR("build failed\n");
+        return 1;
+    }
 
     return 0;
 }
@@ -181,10 +186,10 @@ static int cmd_test(void)    { LOG_ERR("test: not implemented\n");    return 1; 
 static inline int field_check_type(toml_datum_t field, field_id id, toml_type_t type)
 {
     if (field.type == TOML_UNKNOWN) {
-        LOG_WRN("'%s' is not set\n", fields[id].key);
+        LOG_WRN("'%s' is not set\n", fields[id]);
         return 0;
     } else if (field.type != type) {
-        LOG_ERR("missing or invalid '%s' property at '%s'\n", fields[id].key, KART_CONFIG_FILENAME);
+        LOG_ERR("missing or invalid '%s' property at '%s'\n", fields[id], KART_CONFIG_FILENAME);
         toml_free(config.result);
         memset(&config, 0, sizeof config);
         return 1;
@@ -199,7 +204,7 @@ static inline int elem_check_type(toml_datum_t field, int field_id, int elements
         toml_datum_t elem = field.u.arr.elem[i];
 
         if (elem.type != type) {
-            LOG_ERR("Invalid element type at '%s'\n", fields[field_id].key);
+            LOG_ERR("Invalid element type at '%s'\n", fields[field_id]);
             toml_free(config.result);
             memset(&config, 0, sizeof config);
             return 1;
@@ -251,7 +256,7 @@ int main(int argc, char *argv[])
 
     // Get fields info
     for (int i = 0; i < F_COUNT; i++) {
-        toml_datum_t curr_field = toml_seek(config.result.toptab, fields[i].key);
+        toml_datum_t curr_field = toml_seek(config.result.toptab, fields[i]);
 
         switch (i) {
             case F_NAME:

@@ -49,13 +49,6 @@ typedef enum {
     F_COUNT,
 } field_id;
 
-// TODO: The fields struct can be
-// simplified only to an array of keys
-typedef struct {
-    const char* key;
-    field_id id;
-} field_t;
-
 int main(int argc, char *argv[]);
 
 #endif // MAIN_H_

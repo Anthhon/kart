@@ -1,4 +1,3 @@
-#include "helpers.h"
 #define _XOPEN_SOURCE 700
 #include <errno.h>
 #include <dirent.h>
@@ -71,7 +70,7 @@ void file_append_into(char* dir_path, char* dest)
             file_append_into(path, dest);
         } else if (is_file_code(path)) {
             strncat(dest, path, strlen(path) + 1); 
-            STRNCAT_EMPTY_SPACE();
+            STRNCAT_EMPTY_SPACE(dest);
         }
     }
 
