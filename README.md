@@ -45,16 +45,6 @@ OPTIONS:
 
 ```
 
-## Command Reference
-
-| Command | Description |
-|---|---|
-| `kart -n <name>` | Create a new project. |
-| `kart -b` | Build the current project. |
-| `kart -r [args...]` | Run the compiled executable. |
-| `kart -c` | Remove generated build artifacts. |
-| `kart -h` | Display command-line help. |
-
 ## Project Structure
 
 Kart encourages a simple and conventional organization for C projects.
